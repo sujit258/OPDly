@@ -1,0 +1,469 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// =============================================================
+// ENUMS (Shared between Database, API DTOs, and Frontend Types)
+// =============================================================
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum BloodGroup {
+  A_POSITIVE
+  A_NEGATIVE
+  B_POSITIVE
+  B_NEGATIVE
+  AB_POSITIVE
+  AB_NEGATIVE
+  O_POSITIVE
+  O_NEGATIVE
+  UNKNOWN
+}
+
+enum Severity {
+  MILD
+  MODERATE
+  SEVERE
+}
+
+enum VisitStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum VisitType {
+  NEW
+  FOLLOW_UP
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  NET_BANKING
+  OTHER
+}
+
+enum PaymentStatus {
+  PAID
+  PENDING
+  PARTIAL
+  WAIVED
+  REFUNDED
+}
+
+enum MedicineForm {
+  TABLET
+  SYRUP
+  CAPSULE
+  INJECTION
+  DROPS
+  OINTMENT
+  OTHER
+}
+
+enum MedicineTiming {
+  AFTER_FOOD
+  BEFORE_FOOD
+  WITH_FOOD
+  AT_NIGHT
+  EMPTY_STOMACH
+}
+
+enum DoctorRole {
+  OWNER_DOCTOR
+  ASSOCIATE_DOCTOR
+}
+
+// =============================================================
+// CLINIC & DOCTOR
+// =============================================================
+
+model Clinic {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String   @db.VarChar(150)
+  tagline         String?  @default("Simple OPD. For Solo Doctors.") @db.VarChar(150)
+  address         String   @db.Text
+  city            String?  @db.VarChar(100)
+  state           String?  @db.VarChar(100)
+  pincode         String?  @db.VarChar(20)
+  phone           String   @db.VarChar(30)
+  email           String?  @db.VarChar(150)
+  timings         String?  @db.VarChar(200)
+  consultationFee Decimal  @default(500.00) @db.Decimal(10, 2)
+  followUpFee     Decimal  @default(300.00) @db.Decimal(10, 2)
+  gstin           String?  @db.VarChar(50)
+  currency        String   @default("INR") @db.VarChar(10)
+  logoUrl         String?  @db.Text
+  createdAt       DateTime @default(now()) @db.Timestamptz()
+  updatedAt       DateTime @updatedAt @db.Timestamptz()
+
+  // Protected clinical relationships: Restrict prevents cascading loss
+  doctors       Doctor[]
+  patients      Patient[]
+  visits        Visit[]
+  prescriptions Prescription[]
+  bills         Bill[]
+  templates     PrescriptionTemplate[]
+  drafts        ConsultationDraft[]
+  auditLogs     AuditLog[]
+  sessions      Session[]
+
+  @@map("clinics")
+}
+
+model Doctor {
+  id                  String     @id @default(uuid()) @db.Uuid
+  clinicId            String     @db.Uuid
+  name                String     @db.VarChar(120)
+  qualifications      String     @db.VarChar(150)
+  registrationNumber  String     @db.VarChar(100)
+  registrationCouncil String?    @db.VarChar(150)
+  specialty           String     @db.VarChar(150)
+  phone               String     @db.VarChar(30)
+  email               String     @db.VarChar(150)
+  passwordHash        String     @db.VarChar(255)
+  signatureText       String?    @db.VarChar(120)
+  signatureImageUrl   String?    @db.Text
+  role                DoctorRole @default(OWNER_DOCTOR)
+  isActive            Boolean    @default(true)
+  createdAt           DateTime   @default(now()) @db.Timestamptz()
+  updatedAt           DateTime   @updatedAt @db.Timestamptz()
+
+  clinic        Clinic                 @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  visits        Visit[]
+  prescriptions Prescription[]
+  templates     PrescriptionTemplate[]
+  drafts        ConsultationDraft[]
+  auditLogs     AuditLog[]
+  sessions      Session[]
+
+  @@unique([clinicId, email])
+  @@map("doctors")
+}
+
+// =============================================================
+// PATIENT & MEDICAL PROFILE
+// =============================================================
+
+model Patient {
+  id                String     @id @default(uuid()) @db.Uuid
+  clinicId          String     @db.Uuid
+  uhid              String     @db.VarChar(50) // e.g. "P-1001"
+  name              String     @db.VarChar(120)
+  mobile            String     @db.VarChar(30)
+  normalizedMobile  String     @db.VarChar(20) // Stripped digits e.g. "9876543210"
+  age               Int
+  gender            Gender
+  dob               DateTime?  @db.Date
+  address           String?    @db.Text
+  city              String?    @db.VarChar(100)
+  pincode           String?    @db.VarChar(20)
+  emergencyContact  String?    @db.VarChar(30)
+  emergencyRelation String?    @db.VarChar(50)
+  bloodGroup        BloodGroup @default(UNKNOWN)
+  abhaId            String?    @db.VarChar(50)
+  
+  // JSONB profile for clinical tags: { allergies: string[], chronicConditions: string[], currentMedications: string[], notes: string }
+  medicalProfile    Json       @default("{\"allergies\":[],\"chronicConditions\":[]}")
+  
+  isFavorite        Boolean    @default(false)
+  totalVisitsCount  Int        @default(0)
+  lastVisitDate     DateTime?  @db.Timestamptz()
+  lastDiagnosis     String?    @db.VarChar(255)
+  createdAt         DateTime   @default(now()) @db.Timestamptz()
+  updatedAt         DateTime   @updatedAt @db.Timestamptz()
+  deletedAt         DateTime?  @db.Timestamptz() // Soft-delete
+
+  clinic            Clinic              @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  visits            Visit[]
+  prescriptions     Prescription[]
+  bills             Bill[]
+  drafts            ConsultationDraft[]
+
+  @@unique([clinicId, uhid])
+  @@index([clinicId, normalizedMobile])
+  @@index([clinicId, name])
+  @@map("patients")
+}
+
+// =============================================================
+// CONSULTATION (VISIT)
+// =============================================================
+
+model Visit {
+  id               String      @id @default(uuid()) @db.Uuid
+  clinicId         String      @db.Uuid
+  doctorId         String      @db.Uuid
+  patientId        String      @db.Uuid
+  visitNumber      String      @db.VarChar(50) // e.g. "V-2026-0001"
+  visitType        VisitType   @default(NEW)
+  status           VisitStatus @default(COMPLETED)
+  date             DateTime    @default(now()) @db.Timestamptz()
+  startedAt        DateTime?   @db.Timestamptz()
+  completedAt      DateTime?   @db.Timestamptz()
+
+  // Clinical Chief Complaint Notes & Examination
+  clinicalNotes    String?     @db.Text
+  physicalExam     String?     @db.Text
+  followUpText     String?     @default("After 7 days") @db.VarChar(100)
+  nextFollowUpDate DateTime?   @db.Date
+
+  createdAt        DateTime    @default(now()) @db.Timestamptz()
+  updatedAt        DateTime    @updatedAt @db.Timestamptz()
+  deletedAt        DateTime?   @db.Timestamptz() // Soft-delete
+
+  clinic           Clinic               @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  doctor           Doctor               @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  patient          Patient              @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  vitals           Vital?
+  symptoms         VisitSymptom[]
+  diagnoses        VisitDiagnosis[]
+  investigations   VisitInvestigation[]
+  prescription     Prescription?
+  bill             Bill?
+
+  @@unique([clinicId, visitNumber])
+  @@index([clinicId, date])
+  @@index([patientId, date])
+  @@map("visits")
+}
+
+model Vital {
+  id          String   @id @default(uuid()) @db.Uuid
+  visitId     String   @unique @db.Uuid
+  bpSystolic  Int?
+  bpDiastolic Int?
+  pulse       Int?
+  temperature Decimal? @db.Decimal(4, 1) // °F
+  spO2        Int?     // %
+  weight      Decimal? @db.Decimal(5, 2) // kg
+  height      Decimal? @db.Decimal(5, 2) // cm
+  bmi         Decimal? @db.Decimal(4, 1)
+  recordedAt  DateTime @default(now()) @db.Timestamptz()
+
+  visit       Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@map("vitals")
+}
+
+model VisitSymptom {
+  id       String   @id @default(uuid()) @db.Uuid
+  visitId  String   @db.Uuid
+  name     String   @db.VarChar(100)
+  duration String   @db.VarChar(50)
+  severity Severity @default(MODERATE)
+  notes    String?  @db.Text
+
+  visit    Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@map("visit_symptoms")
+}
+
+model VisitDiagnosis {
+  id        String   @id @default(uuid()) @db.Uuid
+  visitId   String   @db.Uuid
+  code      String?  @db.VarChar(30)
+  name      String   @db.VarChar(150)
+  isPrimary Boolean  @default(true)
+
+  visit     Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@map("visit_diagnoses")
+}
+
+model VisitInvestigation {
+  id           String   @id @default(uuid()) @db.Uuid
+  visitId      String   @db.Uuid
+  testName     String   @db.VarChar(150)
+  instructions String?  @db.Text
+  cost         Decimal? @default(0.00) @db.Decimal(10, 2)
+
+  visit        Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@map("visit_investigations")
+}
+
+// =============================================================
+// PRESCRIPTION (Immutable Clinical Record)
+// =============================================================
+
+model Prescription {
+  id                 String   @id @default(uuid()) @db.Uuid
+  clinicId           String   @db.Uuid
+  doctorId           String   @db.Uuid
+  patientId          String   @db.Uuid
+  visitId            String   @unique @db.Uuid
+  prescriptionNumber String   @db.VarChar(50) // e.g. "RX-2026-0089"
+  date               DateTime @default(now()) @db.Date
+  generalAdvice      Json     @default("[]") // string[]
+  instructions       String?  @db.Text
+  followUpText       String?  @default("After 7 days") @db.VarChar(100)
+  signatureApplied   Boolean  @default(true)
+  signedAt           DateTime @default(now()) @db.Timestamptz()
+  createdAt          DateTime @default(now()) @db.Timestamptz()
+  updatedAt          DateTime @updatedAt @db.Timestamptz()
+
+  clinic             Clinic                 @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  doctor             Doctor                 @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  patient            Patient                @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  visit              Visit                  @relation(fields: [visitId], references: [id], onDelete: Restrict)
+  medicines          PrescriptionMedicine[]
+
+  @@unique([clinicId, prescriptionNumber])
+  @@index([patientId, date])
+  @@map("prescriptions")
+}
+
+model PrescriptionMedicine {
+  id             String         @id @default(uuid()) @db.Uuid
+  prescriptionId String         @db.Uuid
+  medicineName   String         @db.VarChar(150)
+  genericName    String?        @db.VarChar(150)
+  form           MedicineForm   @default(TABLET)
+  dosage         String         @db.VarChar(50)
+  frequency      String         @db.VarChar(50)
+  timing         MedicineTiming @default(AFTER_FOOD)
+  duration       String         @db.VarChar(50)
+  instructions   String?        @db.Text
+  sortOrder      Int            @default(0)
+
+  prescription   Prescription   @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  @@map("prescription_medicines")
+}
+
+// =============================================================
+// BILLING & FINANCIAL AUDIT
+// =============================================================
+
+model Bill {
+  id                   String        @id @default(uuid()) @db.Uuid
+  clinicId             String        @db.Uuid
+  visitId              String        @unique @db.Uuid
+  patientId            String        @db.Uuid
+  invoiceNumber        String        @db.VarChar(50) // e.g. "INV-2026-0042"
+  consultationFee      Decimal       @default(500.00) @db.Decimal(10, 2)
+  investigationCharges Decimal       @default(0.00) @db.Decimal(10, 2)
+  otherCharges         Decimal       @default(0.00) @db.Decimal(10, 2)
+  discount             Decimal       @default(0.00) @db.Decimal(10, 2)
+  totalAmount          Decimal       @db.Decimal(10, 2)
+  paidAmount           Decimal       @default(0.00) @db.Decimal(10, 2)
+  status               PaymentStatus @default(PAID)
+  notes                String?       @db.Text
+  createdAt            DateTime      @default(now()) @db.Timestamptz()
+  updatedAt            DateTime      @updatedAt @db.Timestamptz()
+
+  clinic               Clinic        @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  visit                Visit         @relation(fields: [visitId], references: [id], onDelete: Restrict)
+  patient              Patient       @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  payments             Payment[]
+
+  @@unique([clinicId, invoiceNumber])
+  @@index([clinicId, createdAt])
+  @@map("bills")
+}
+
+model Payment {
+  id             String        @id @default(uuid()) @db.Uuid
+  billId         String        @db.Uuid
+  amount         Decimal       @db.Decimal(10, 2)
+  method         PaymentMethod @default(UPI)
+  status         PaymentStatus @default(PAID)
+  transactionRef String?       @db.VarChar(100)
+  paidAt         DateTime      @default(now()) @db.Timestamptz()
+
+  bill           Bill          @relation(fields: [billId], references: [id], onDelete: Restrict)
+
+  @@map("payments")
+}
+
+// =============================================================
+// TEMPLATES, TRANSIENT DRAFTS & AUDIT LOGS
+// =============================================================
+
+model PrescriptionTemplate {
+  id             String   @id @default(uuid()) @db.Uuid
+  clinicId       String   @db.Uuid
+  doctorId       String?  @db.Uuid
+  name           String   @db.VarChar(100)
+  description    String?  @db.Text
+  medicines      Json     // PrescriptionMedicine[]
+  advices        Json     @default("[]")
+  investigations Json     @default("[]")
+  usageCount     Int      @default(0)
+  createdAt      DateTime @default(now()) @db.Timestamptz()
+  updatedAt      DateTime @updatedAt @db.Timestamptz()
+
+  clinic         Clinic   @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  doctor         Doctor?  @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+
+  @@unique([clinicId, name])
+  @@map("prescription_templates")
+}
+
+// Transient entity: Cascades cleanly if doctor or patient is purged
+model ConsultationDraft {
+  id        String   @id @default(uuid()) @db.Uuid
+  clinicId  String   @db.Uuid
+  doctorId  String   @db.Uuid
+  patientId String   @db.Uuid
+  draftData Json     // Active consultation wizard state
+  updatedAt DateTime @updatedAt @db.Timestamptz()
+
+  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  doctor    Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, patientId])
+  @@map("consultation_drafts")
+}
+
+// Lightweight Audit Log for Key Events
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  clinicId   String   @db.Uuid
+  doctorId   String   @db.Uuid
+  action     String   @db.VarChar(50) // "PATIENT_CREATED", "PATIENT_UPDATED", "VISIT_COMPLETED", etc.
+  entityType String   @db.VarChar(50) // "Patient", "Visit", "Prescription", "Bill", "Clinic"
+  entityId   String?  @db.VarChar(100)
+  metadata   Json?
+  timestamp  DateTime @default(now()) @db.Timestamptz()
+
+  clinic     Clinic   @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  doctor     Doctor   @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, timestamp])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+// Server-side Revocable Session with CSRF token
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  clinicId   String    @db.Uuid
+  doctorId   String    @db.Uuid
+  tokenHash  String    @unique @db.VarChar(255)
+  csrfToken  String    @db.VarChar(255)
+  revokedAt  DateTime? @db.Timestamptz()
+  expiresAt  DateTime  @db.Timestamptz()
+  createdAt  DateTime  @default(now()) @db.Timestamptz()
+
+  clinic     Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  doctor     Doctor    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId, expiresAt])
+  @@index([clinicId])
+  @@map("sessions")
+}
+

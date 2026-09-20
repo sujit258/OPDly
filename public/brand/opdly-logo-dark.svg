@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 56" fill="none">
+  <defs>
+    <linearGradient id="leaf-dark" x1="24" y1="8" x2="38" y2="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2dd4bf"/>
+      <stop offset="100%" stop-color="#0d9488"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(2, 4)">
+    <rect width="48" height="48" rx="12" fill="#1e293b"/>
+    <path d="M14 14C14 19.5228 18.4772 24 24 24C29.5228 24 34 19.5228 34 14" stroke="#2dd4bf" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M24 24V34C24 36.2091 22.2091 38 20 38H17" stroke="#2dd4bf" stroke-width="3.5" stroke-linecap="round"/>
+    <circle cx="16" cy="38" r="2.5" fill="#2dd4bf"/>
+    <circle cx="14" cy="14" r="2.5" fill="#2dd4bf"/>
+    <circle cx="34" cy="14" r="2.5" fill="#2dd4bf"/>
+    <path d="M24 10C24 10 20 16 20 19C20 21.2091 21.7909 23 24 23C26.2091 23 28 21.2091 28 19C28 16 24 10 24 10Z" fill="url(#leaf-dark)"/>
+  </g>
+
+  <text x="62" y="32" font-family="'Inter', -apple-system, system-ui, sans-serif" font-size="26" font-weight="800" fill="#f8fafc" letter-spacing="-0.5">OPD<tspan fill="#2dd4bf">ly</tspan></text>
+  <text x="63" y="46" font-family="'Inter', -apple-system, system-ui, sans-serif" font-size="9.5" font-weight="500" fill="#94a3b8" letter-spacing="0.2">Simple OPD. For Solo Doctors.</text>
+</svg>
