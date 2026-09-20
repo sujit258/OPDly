@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "prisma generate && tsc && vite build",
-    "vercel-build": "prisma generate && prisma db push --accept-data-loss && tsx prisma/seed.ts && tsc && vite build",
+    "vercel-build": "prisma generate && prisma migrate deploy && tsc && vite build",
     "preview": "vite preview",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:status": "prisma migrate status",
     "seed": "tsx prisma/seed.ts",
     "test:security": "tsx tests/runSecurityAndIsolationTests.ts"
   },

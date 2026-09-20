@@ -50,9 +50,14 @@ async function main() {
     console.log(`Created Doctor: ${doctor.name} (${doctor.id})`);
   }
 
-  // 3. Create Demo Patients
+  // 3. Create Demo Patients (Local/development mode or explicit opt-in)
+  const isDev = process.env.NODE_ENV !== 'production';
+  const forceSeedPatients = process.env.SEED_DEMO_PATIENTS === 'true';
+  const shouldSeedPatients = isDev || forceSeedPatients;
+
   const patientsCount = await prisma.patient.count({ where: { clinicId: clinic.id } });
-  if (patientsCount === 0) {
+  if (shouldSeedPatients && patientsCount === 0) {
+    console.log('Seeding initial demo patients for local development...');
     await prisma.patient.createMany({
       data: [
         {
