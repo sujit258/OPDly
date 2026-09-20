@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "prisma generate && tsc && vite build",
-    "vercel-build": "prisma generate && prisma migrate deploy && tsc && vite build",
+    "vercel-build": "prisma generate && node prisma/deploy.js && tsc && vite build",
     "preview": "vite preview",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
