@@ -2,6 +2,7 @@ import React from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Patient } from '../../types';
 import { PatientAvatar } from './PatientAvatar';
+import { formatPatientVisitDate } from '../../utils/dateUtils';
 
 export interface PatientCardProps {
   patient: Patient;
@@ -57,7 +58,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({
           <p className="text-xs text-slate-500 truncate mt-0.5">{formattedSubtitle}</p>
           {patient.lastVisitDate && (
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Last visit: {patient.lastVisitDate}
+              Last visit: {formatPatientVisitDate(patient.lastVisitDate)}
             </p>
           )}
         </div>

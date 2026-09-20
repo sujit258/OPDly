@@ -115,9 +115,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             sublabel="Today"
           />
           <StatCard
-            label="Completed"
+            label="Consultations"
             value={Math.round((reports?.totalPatients || 18) * 0.66)}
-            sublabel="Consulted"
           />
           <StatCard
             label="Collected"
@@ -136,7 +135,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             onClick={onNewPatient}
             leftIcon={<Plus className="w-5 h-5" />}
           >
-            + Add Patient
+            Add Patient
           </Button>
         </div>
       </div>

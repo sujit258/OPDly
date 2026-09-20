@@ -17,6 +17,7 @@ import { Bill, Patient, Prescription, Visit } from '../types';
 import { PatientAvatar } from '../components/common/PatientAvatar';
 import { Button } from '../components/common/Button';
 import { LoadingState, EmptyState } from '../components/common/EmptyState';
+import { formatPatientVisitDate } from '../utils/dateUtils';
 
 export interface PatientProfileScreenProps {
   patientId: string;
@@ -93,7 +94,7 @@ export const PatientProfileScreen: React.FC<PatientProfileScreenProps> = ({
         <div className="p-3 rounded-2xl bg-white border border-slate-100 shadow-sm text-center">
           <span className="text-[10px] font-bold text-slate-400 uppercase">Last Visit</span>
           <div className="text-xs font-bold text-teal-700 mt-1 truncate">
-            {patient.lastVisitDate ? patient.lastVisitDate.split('T')[0] : 'First Visit'}
+            {patient.lastVisitDate ? formatPatientVisitDate(patient.lastVisitDate, false) : 'First Visit'}
           </div>
         </div>
       </div>

@@ -151,11 +151,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         {/* Desktop Quick Action */}
         <div className="p-4 border-t border-slate-100 bg-white">
           <Button
-            variant="primary"
+            variant="outline"
             size="md"
             fullWidth
             onClick={onNewPatientClick}
             leftIcon={<Plus className="w-4 h-4" />}
+            className="border-slate-200 text-slate-700 hover:border-teal-500 hover:text-teal-700 hover:bg-teal-50/50"
           >
             New Patient
           </Button>
