@@ -40,6 +40,48 @@ authRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
       doctor = await prisma.doctor.findFirst({ where: { isActive: true } });
     }
 
+    // If database is completely unseeded (0 doctors), auto-bootstrap initial Aarogyam clinic & doctor
+    if (!doctor) {
+      const doctorCount = await prisma.doctor.count();
+      if (doctorCount === 0) {
+        let clinic = await prisma.clinic.findFirst();
+        if (!clinic) {
+          clinic = await prisma.clinic.create({
+            data: {
+              name: 'Aarogyam Clinic',
+              tagline: 'Simple OPD. For Solo Doctors.',
+              address: 'Shop 4, Galaxy Enclave, Paud Road, Kothrud, Pune, Maharashtra 411038',
+              city: 'Pune',
+              state: 'Maharashtra',
+              pincode: '411038',
+              phone: '98765 43210',
+              email: 'aarogyam@opdly.suvidhatools.in',
+              timings: 'Mon - Sat: 9:30 AM - 1:30 PM, 5:30 PM - 9:30 PM',
+              consultationFee: 500.0,
+              followUpFee: 300.0,
+              currency: 'INR',
+            },
+          });
+        }
+        doctor = await prisma.doctor.create({
+          data: {
+            clinicId: clinic.id,
+            name: 'Dr. Rajesh Sharma',
+            qualifications: 'MBBS, MD (Medicine)',
+            registrationNumber: 'MH/MED/2014/1982',
+            registrationCouncil: 'Maharashtra Medical Council',
+            specialty: 'Consultant Physician',
+            phone: '98765 43210',
+            email: 'dr.sharma@opdly.suvidhatools.in',
+            passwordHash: 'seeded_hashed_password',
+            signatureText: 'Dr. Rajesh Sharma, MD',
+            role: 'OWNER_DOCTOR',
+            isActive: true,
+          },
+        });
+      }
+    }
+
     if (!doctor) {
       res.status(401).json({ error: 'Doctor account not found or inactive' });
       return;
@@ -73,9 +115,16 @@ authRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
       clinic,
       csrfToken,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Authentication failed' });
+    if (error?.message?.includes('does not exist')) {
+      res.status(500).json({
+        error: 'Database schema not migrated: tables do not exist in Neon PostgreSQL. Please run prisma db push.',
+        details: error?.message,
+      });
+      return;
+    }
+    res.status(500).json({ error: 'Authentication failed', details: error?.message });
   }
 });
 
