@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 import { prisma } from '../db.js';
 import {
   createSession,
@@ -8,6 +9,7 @@ import {
   requireAuth,
   getCookies,
   SESSION_COOKIE_NAME,
+  CSRF_COOKIE_NAME,
 } from '../middleware/auth.js';
 import { logAudit } from '../services/audit.js';
 
@@ -181,8 +183,43 @@ authRouter.get('/me', requireAuth, async (req: Request, res: Response): Promise<
 
 /**
  * GET /api/v1/auth/csrf
- * Returns CSRF token for active authenticated session
+ * Returns CSRF token for active authenticated session, or issues a fresh CSRF token
  */
-authRouter.get('/csrf', requireAuth, (req: Request, res: Response): void => {
-  res.json({ csrfToken: req.sessionCsrfToken });
+authRouter.get('/csrf', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const cookies = getCookies(req);
+    const rawToken = cookies[SESSION_COOKIE_NAME];
+
+    if (rawToken) {
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const session = await prisma.session.findUnique({
+        where: { tokenHash },
+      });
+      if (session && !session.revokedAt && session.expiresAt > new Date()) {
+        res.cookie(CSRF_COOKIE_NAME, session.csrfToken, {
+          httpOnly: false,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 30 * 24 * 60 * 60 * 1000,
+        });
+        res.json({ csrfToken: session.csrfToken });
+        return;
+      }
+    }
+
+    const freshCsrfToken = crypto.randomBytes(32).toString('hex');
+    const isProd = process.env.NODE_ENV === 'production';
+    res.cookie(CSRF_COOKIE_NAME, freshCsrfToken, {
+      httpOnly: false,
+      secure: isProd,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+    res.json({ csrfToken: freshCsrfToken });
+  } catch (err) {
+    const fallbackToken = crypto.randomBytes(32).toString('hex');
+    res.json({ csrfToken: fallbackToken });
+  }
 });
