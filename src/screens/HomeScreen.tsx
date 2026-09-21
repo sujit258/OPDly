@@ -99,13 +99,28 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
       {/* TODAY'S OPD SUMMARY CARD (3 Columns: Patients | Completed | Collected) */}
       <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-card">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Today's OPD
-          </h3>
-          <span className="inline-flex items-center text-[11px] text-teal-700 font-semibold bg-teal-50 px-2 py-0.5 rounded-full">
-            Live
-          </span>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Today's OPD
+            </h3>
+            <span className="inline-flex items-center text-[11px] text-teal-700 font-semibold bg-teal-50 px-2 py-0.5 rounded-full">
+              Live
+            </span>
+          </div>
+
+          {/* Desktop compact Add Patient button */}
+          <div className="hidden md:block">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={onNewPatient}
+              leftIcon={<Plus className="w-4 h-4" />}
+              className="h-10 px-4 rounded-lg font-semibold text-sm shadow-sm"
+            >
+              Add Patient
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2 sm:gap-4">
@@ -126,8 +141,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           />
         </div>
 
-        {/* Primary CTA: + Add Patient */}
-        <div className="mt-4">
+        {/* Mobile Primary CTA: + Add Patient */}
+        <div className="mt-4 md:hidden">
           <Button
             variant="primary"
             size="lg"
