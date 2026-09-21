@@ -154,6 +154,13 @@ export const ConsultationWorkspaceScreen: React.FC<ConsultationWorkspaceScreenPr
 
     const draft: ConsultationDraft = {
       patientId: patient.id,
+      patientName: patient.name,
+      patient: {
+        id: patient.id,
+        name: patient.name,
+        age: patient.age,
+        gender: patient.gender,
+      },
       currentStep,
       startedAt: new Date().toISOString(),
       symptoms,

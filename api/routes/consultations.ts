@@ -4,6 +4,39 @@ import { requireAuth, requireCsrf } from '../middleware/auth.js';
 
 export const consultationsRouter = Router();
 
+
+// Safe Enum Normalizers to bridge frontend DTO types with Prisma PostgreSQL enums.
+// Returns normalized enum string or null if the value is invalid.
+function normalizeSeverity(severity?: string | null): 'MILD' | 'MODERATE' | 'SEVERE' | null {
+  if (!severity) return 'MODERATE';
+  const upper = severity.trim().toUpperCase();
+  if (upper === 'MILD' || upper === 'MODERATE' || upper === 'SEVERE') {
+    return upper;
+  }
+  return null;
+}
+
+function normalizeMedicineForm(form?: string | null): 'TABLET' | 'SYRUP' | 'CAPSULE' | 'INJECTION' | 'DROPS' | 'OINTMENT' | 'OTHER' | null {
+  if (!form) return 'TABLET';
+  const upper = form.trim().toUpperCase();
+  const valid = ['TABLET', 'SYRUP', 'CAPSULE', 'INJECTION', 'DROPS', 'OINTMENT', 'OTHER'] as const;
+  return valid.includes(upper as any) ? (upper as any) : null;
+}
+
+function normalizeMedicineTiming(timing?: string | null): 'AFTER_FOOD' | 'BEFORE_FOOD' | 'WITH_FOOD' | 'AT_NIGHT' | 'EMPTY_STOMACH' | null {
+  if (!timing) return 'AFTER_FOOD';
+  const normalized = timing.trim().toUpperCase().replace(/\s+/g, '_');
+  const valid = ['AFTER_FOOD', 'BEFORE_FOOD', 'WITH_FOOD', 'AT_NIGHT', 'EMPTY_STOMACH'] as const;
+  return valid.includes(normalized as any) ? (normalized as any) : null;
+}
+
+function normalizePaymentMethod(method?: string | null): 'CASH' | 'UPI' | 'CARD' | 'NET_BANKING' | 'OTHER' | null {
+  if (!method) return 'UPI';
+  const upper = method.trim().toUpperCase();
+  const valid = ['CASH', 'UPI', 'CARD', 'NET_BANKING', 'OTHER'] as const;
+  return valid.includes(upper as any) ? (upper as any) : null;
+}
+
 consultationsRouter.use(requireAuth);
 consultationsRouter.use(requireCsrf);
 
@@ -180,10 +213,37 @@ consultationsRouter.post('/complete', async (req: Request, res: Response): Promi
       return;
     }
 
+    // Validate Symptoms
+    for (const s of symptoms) {
+      if (s.severity && !normalizeSeverity(s.severity)) {
+        res.status(400).json({ error: `Invalid symptom severity: '${s.severity}'. Expected Mild, Moderate, or Severe.` });
+        return;
+      }
+    }
+
+    // Validate Medicines
+    for (const m of medicines) {
+      if (m.form && !normalizeMedicineForm(m.form)) {
+        res.status(400).json({ error: `Invalid medicine form: '${m.form}'.` });
+        return;
+      }
+      if (m.timing && !normalizeMedicineTiming(m.timing)) {
+        res.status(400).json({ error: `Invalid medicine timing: '${m.timing}'.` });
+        return;
+      }
+    }
+
+    // Validate Payment Method
+    const normalizedPaymentMethod = normalizePaymentMethod(paymentMethod);
+    if (!normalizedPaymentMethod) {
+      res.status(400).json({ error: `Invalid payment method: '${paymentMethod}'.` });
+      return;
+    }
+
     // Determine visit number & type
     const totalExisting = await prisma.visit.count({ where: { clinicId: req.clinicId! } });
     const visitNumber = `V-${new Date().getFullYear()}-${String(totalExisting + 1).padStart(4, '0')}`;
-    const visitType = patient.totalVisitsCount > 0 ? 'FOLLOW_UP' : 'NEW';
+    const visitType: 'NEW' | 'FOLLOW_UP' = patient.totalVisitsCount > 0 ? 'FOLLOW_UP' : 'NEW';
 
     const totalBill = Math.max(0, consultationFee - discount);
     const primaryDiagName = diagnoses[0]?.name || 'Clinical Evaluation';
@@ -197,7 +257,7 @@ consultationsRouter.post('/complete', async (req: Request, res: Response): Promi
           doctorId: req.doctor!.id,
           patientId,
           visitNumber,
-          visitType: visitType as any,
+          visitType,
           status: 'COMPLETED',
           clinicalNotes: clinicalNotes || null,
           followUpText: followUp,
@@ -227,7 +287,7 @@ consultationsRouter.post('/complete', async (req: Request, res: Response): Promi
             visitId: visit.id,
             name: s.name,
             duration: s.duration,
-            severity: s.severity || 'MODERATE',
+            severity: normalizeSeverity(s.severity) || "MODERATE",
             notes: s.notes || null,
           },
         });
@@ -283,10 +343,10 @@ consultationsRouter.post('/complete', async (req: Request, res: Response): Promi
             prescriptionId: prescription.id,
             medicineName: m.medicineName,
             genericName: m.genericName || null,
-            form: m.form || 'TABLET',
+            form: normalizeMedicineForm(m.form) || "TABLET",
             dosage: m.dosage || '1 tablet',
             frequency: m.frequency || '1-0-1',
-            timing: m.timing || 'AFTER_FOOD',
+            timing: normalizeMedicineTiming(m.timing) || "AFTER_FOOD",
             duration: m.duration || '5 days',
             instructions: m.instructions || null,
             sortOrder: i,
@@ -318,7 +378,7 @@ consultationsRouter.post('/complete', async (req: Request, res: Response): Promi
           data: {
             billId: bill.id,
             amount: totalBill,
-            method: paymentMethod as any,
+            method: normalizedPaymentMethod,
             status: 'PAID',
             paidAt: new Date(),
           },
@@ -376,7 +436,19 @@ consultationsRouter.post('/complete', async (req: Request, res: Response): Promi
       },
     });
 
-    res.status(201).json(fullResult);
+    const formattedResult = fullResult
+      ? {
+          ...fullResult,
+          bill: fullResult.bill
+            ? {
+                ...fullResult.bill,
+                payment: fullResult.bill.payments?.[0] || null,
+              }
+            : null,
+        }
+      : null;
+
+    res.status(201).json(formattedResult);
   } catch (error: any) {
     console.error('Complete consultation error (rolled back):', error);
     // Draft remains intact and recoverable in PostgreSQL
@@ -403,7 +475,31 @@ consultationsRouter.get('/draft', async (req: Request, res: Response): Promise<v
       return;
     }
 
-    res.json(draft.draftData);
+    // Fetch patient display info scoped to authenticated clinic
+    const patient = await prisma.patient.findFirst({
+      where: {
+        id: draft.patientId,
+        clinicId: req.clinicId!,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        age: true,
+        gender: true,
+      },
+    });
+
+    const draftData =
+      draft.draftData && typeof draft.draftData === 'object'
+        ? {
+            ...draft.draftData,
+            patientName: patient?.name || (draft.draftData as any).patientName || 'this patient',
+            patient: patient || null,
+          }
+        : draft.draftData;
+
+    res.json(draftData);
   } catch (error) {
     console.error('Fetch draft error:', error);
     res.status(500).json({ error: 'Failed to fetch consultation draft' });

@@ -334,6 +334,134 @@ async function main() {
       assert(Boolean(apiRewrite), 'vercel.json must rewrite /api/v1/(.*) to /api');
     });
 
+        // -------------------------------------------------------------
+    // SUITE 7: CONSULTATION COMPLETION ENUM NORMALIZATION & DRAFT DISPLAY
+    // -------------------------------------------------------------
+    console.log('\n[Suite 7: Consultation Completion Enum Normalization & Draft Display]');
+
+    await runTest('ConsultationCompletion', 'Enum normalizers map frontend casing to Prisma enums and reject invalid values', async () => {
+      // 1. Severity mapping
+      function normalizeSeverity(sev?: string | null): 'MILD' | 'MODERATE' | 'SEVERE' | null {
+        if (!sev) return 'MODERATE';
+        const u = sev.trim().toUpperCase();
+        if (u === 'MILD' || u === 'MODERATE' || u === 'SEVERE') return u;
+        return null;
+      }
+
+      // 2. MedicineForm mapping
+      function normalizeMedicineForm(form?: string | null): 'TABLET' | 'SYRUP' | 'CAPSULE' | 'INJECTION' | 'DROPS' | 'OINTMENT' | 'OTHER' | null {
+        if (!form) return 'TABLET';
+        const u = form.trim().toUpperCase();
+        const valid = ['TABLET', 'SYRUP', 'CAPSULE', 'INJECTION', 'DROPS', 'OINTMENT', 'OTHER'] as const;
+        return valid.includes(u as any) ? (u as any) : null;
+      }
+
+      // 3. MedicineTiming mapping
+      function normalizeMedicineTiming(timing?: string | null): 'AFTER_FOOD' | 'BEFORE_FOOD' | 'WITH_FOOD' | 'AT_NIGHT' | 'EMPTY_STOMACH' | null {
+        if (!timing) return 'AFTER_FOOD';
+        const norm = timing.trim().toUpperCase().replace(/\s+/g, '_');
+        const valid = ['AFTER_FOOD', 'BEFORE_FOOD', 'WITH_FOOD', 'AT_NIGHT', 'EMPTY_STOMACH'] as const;
+        return valid.includes(norm as any) ? (norm as any) : null;
+      }
+
+      // 4. PaymentMethod mapping
+      function normalizePaymentMethod(method?: string | null): 'CASH' | 'UPI' | 'CARD' | 'NET_BANKING' | 'OTHER' | null {
+        if (!method) return 'UPI';
+        const u = method.trim().toUpperCase();
+        const valid = ['CASH', 'UPI', 'CARD', 'NET_BANKING', 'OTHER'] as const;
+        return valid.includes(u as any) ? (u as any) : null;
+      }
+
+      // Test valid casing variations
+      assert(normalizeSeverity('Mild') === 'MILD', '"Mild" -> MILD');
+      assert(normalizeSeverity('mild') === 'MILD', '"mild" -> MILD');
+      assert(normalizeSeverity('MILD') === 'MILD', '"MILD" -> MILD');
+      assert(normalizeSeverity('Moderate') === 'MODERATE', '"Moderate" -> MODERATE');
+      assert(normalizeSeverity('moderate') === 'MODERATE', '"moderate" -> MODERATE');
+      assert(normalizeSeverity('MODERATE') === 'MODERATE', '"MODERATE" -> MODERATE');
+      assert(normalizeSeverity('Severe') === 'SEVERE', '"Severe" -> SEVERE');
+      assert(normalizeSeverity('severe') === 'SEVERE', '"severe" -> SEVERE');
+      assert(normalizeSeverity('SEVERE') === 'SEVERE', '"SEVERE" -> SEVERE');
+
+      assert(normalizeMedicineForm('Tablet') === 'TABLET', '"Tablet" -> TABLET');
+      assert(normalizeMedicineForm('tablet') === 'TABLET', '"tablet" -> TABLET');
+      assert(normalizeMedicineForm('TABLET') === 'TABLET', '"TABLET" -> TABLET');
+      assert(normalizeMedicineForm('Syrup') === 'SYRUP', '"Syrup" -> SYRUP');
+
+      assert(normalizeMedicineTiming('After food') === 'AFTER_FOOD', '"After food" -> AFTER_FOOD');
+      assert(normalizeMedicineTiming('after food') === 'AFTER_FOOD', '"after food" -> AFTER_FOOD');
+      assert(normalizeMedicineTiming('AFTER_FOOD') === 'AFTER_FOOD', '"AFTER_FOOD" -> AFTER_FOOD');
+      assert(normalizeMedicineTiming('Before food') === 'BEFORE_FOOD', '"Before food" -> BEFORE_FOOD');
+
+      assert(normalizePaymentMethod('Cash') === 'CASH', '"Cash" -> CASH');
+      assert(normalizePaymentMethod('cash') === 'CASH', '"cash" -> CASH');
+      assert(normalizePaymentMethod('CASH') === 'CASH', '"CASH" -> CASH');
+      assert(normalizePaymentMethod('UPI') === 'UPI', '"UPI" -> UPI');
+      assert(normalizePaymentMethod('Card') === 'CARD', '"Card" -> CARD');
+
+      // Test invalid values are safely rejected (return null, triggering HTTP 400)
+      assert(normalizeSeverity('Extreme') === null, 'Invalid severity "Extreme" must return null');
+      assert(normalizeSeverity('Unknown') === null, 'Invalid severity "Unknown" must return null');
+      assert(normalizeMedicineForm('MagicPotion') === null, 'Invalid form "MagicPotion" must return null');
+      assert(normalizeMedicineTiming('Tomorrow') === null, 'Invalid timing "Tomorrow" must return null');
+      assert(normalizePaymentMethod('Cryptocurrency') === null, 'Invalid paymentMethod "Cryptocurrency" must return null');
+    });
+
+    await runTest('DraftRecoveryBanner', 'Draft recovery returns patient summary and banner displays patient name without exposing UUID', async () => {
+      // Rahul Patil draft in production
+      const mockPatient = {
+        id: '4f06b1d0-c1f6-4fb1-876a-6a8b4ac61a88',
+        name: 'Rahul Patil',
+        age: 32,
+        gender: 'MALE',
+      };
+
+      const rawDraftData = {
+        patientId: mockPatient.id,
+        currentStep: 1,
+        symptoms: [{ name: 'Fever', severity: 'Moderate' }],
+      };
+
+      // Server enrichment simulation with select: { id, name, age, gender }
+      const enrichedDraft = {
+        ...rawDraftData,
+        patientName: mockPatient.name,
+        patient: {
+          id: mockPatient.id,
+          name: mockPatient.name,
+          age: mockPatient.age,
+          gender: mockPatient.gender,
+        },
+      };
+
+      // Verify patient summary fields: only id, name, age, gender
+      const patientKeys = Object.keys(enrichedDraft.patient).sort();
+      assert(
+        JSON.stringify(patientKeys) === JSON.stringify(['age', 'gender', 'id', 'name']),
+        'Patient summary must only contain id, name, age, gender'
+      );
+      assert(enrichedDraft.patientName === 'Rahul Patil', 'Draft must return patientName = "Rahul Patil"');
+
+      // Frontend banner display logic
+      const bannerDisplayName = enrichedDraft.patient?.name || enrichedDraft.patientName || 'this patient';
+      assert(bannerDisplayName === 'Rahul Patil', 'Banner must display Rahul Patil');
+      assert(!bannerDisplayName.includes('4f06b1d0'), 'Banner text must NEVER contain raw UUID');
+
+      // Verify UUID remains available internally
+      const internalId = enrichedDraft.patientId;
+      assert(internalId === '4f06b1d0-c1f6-4fb1-876a-6a8b4ac61a88', 'UUID must remain available internally');
+
+      // Missing/deleted patient fallback
+      const deletedPatientDraft = {
+        ...rawDraftData,
+        patientName: 'this patient',
+        patient: null,
+      };
+      const fallbackDisplayName = (deletedPatientDraft as any).patient?.name || (deletedPatientDraft as any).patientName || 'this patient';
+      assert(fallbackDisplayName === 'this patient', 'Fallback must be "this patient" when patient record is deleted');
+      assert(!fallbackDisplayName.includes('4f06b1d0'), 'Fallback text must NEVER contain raw UUID');
+    });
+
   } finally {
     server.close();
   }

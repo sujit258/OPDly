@@ -146,6 +146,7 @@ export interface Bill {
   discount: number;
   totalAmount: number;
   payment: Payment;
+  payments?: Payment[];
   notes?: string;
   createdAt: string;
 }
@@ -203,6 +204,13 @@ export interface Visit {
 // Active consultation working draft state
 export interface ConsultationDraft {
   patientId: string;
+  patientName?: string;
+  patient?: {
+    id: string;
+    name: string;
+    age?: number;
+    gender?: Gender | string;
+  } | null;
   currentStep: number; // 1 to 5
   startedAt: string;
   symptoms: VisitSymptom[];

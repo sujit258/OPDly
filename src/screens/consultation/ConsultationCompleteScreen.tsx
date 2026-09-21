@@ -26,7 +26,7 @@ export const ConsultationCompleteScreen: React.FC<ConsultationCompleteScreenProp
 }) => {
   const cleanPhone = patient.mobile.replace(/\s+/g, '');
   const billAmount = visit.bill?.totalAmount || 500;
-  const paymentMethod = visit.bill?.payment.method || 'UPI';
+  const paymentMethod = visit.bill?.payment?.method || visit.bill?.payments?.[0]?.method || 'UPI';
 
   // Format WhatsApp message text
   const shareText = encodeURIComponent(

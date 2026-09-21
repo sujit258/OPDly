@@ -37,6 +37,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const consultationRepo = useConsultationRepo();
   const [hasDraft, setHasDraft] = useState(false);
   const [draftPatientId, setDraftPatientId] = useState<string | null>(null);
+  const [draftPatientName, setDraftPatientName] = useState<string>('this patient');
 
   // Check for unfinished consultation draft on mount and periodically
   useEffect(() => {
@@ -45,9 +46,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       if (draft && draft.patientId) {
         setHasDraft(true);
         setDraftPatientId(draft.patientId);
+        const name = draft.patient?.name || draft.patientName || 'this patient';
+        setDraftPatientName(name);
       } else {
         setHasDraft(false);
         setDraftPatientId(null);
+        setDraftPatientName('this patient');
       }
     };
     checkDraft();
@@ -203,12 +207,15 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
         {/* UNFINISHED CONSULTATION RECOVERY ALERT BANNER */}
         {hasDraft && onContinueDraft && (
-          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-3 text-amber-900 text-xs sm:text-sm animate-in slide-in-from-top duration-150 z-10">
+          <div
+            data-patient-id={draftPatientId || undefined}
+            className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-3 text-amber-900 text-xs sm:text-sm animate-in slide-in-from-top duration-150 z-10"
+          >
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
               <span className="font-semibold">Unfinished consultation found</span>
               <span className="text-amber-700 hidden sm:inline">
-                (Draft saved for patient {draftPatientId})
+                ({draftPatientName} has an unfinished consultation saved.)
               </span>
             </div>
             <div className="flex items-center gap-2">
